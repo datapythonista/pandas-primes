@@ -1,0 +1,13 @@
+[package]
+name = "pandas_primes"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "pandas_prime"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.17.1", features = ["extension-module"] }
+arrow2 = { version = "0.14.1" }
+libc = "0.2"
