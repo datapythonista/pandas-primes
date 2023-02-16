@@ -1,4 +1,4 @@
-/// Extension to compute primality of a pandas Series using Rust.
+/// Extension to compute primality of an Arrow array using Rust.
 ///
 /// This module implements two functions that will be available from Python:
 /// - `is_prime`: Returns an array with the primality of each individual number
@@ -14,7 +14,7 @@
 use pyo3::prelude::*;
 use pyo3::ffi::Py_uintptr_t;
 use arrow2::array::{UInt64Array, BooleanArray};
-use arrow2::datatypes::DataType;
+use arrow2::datatypes::{DataType, Field};
 use arrow2::bitmap::MutableBitmap;
 use arrow2::ffi;
 use libc::uintptr_t;
@@ -54,9 +54,13 @@ pub fn pyarrow_to_arrow2(pyarrow_array: &PyAny) -> UInt64Array {
 pub fn arrow2_to_pyarrow(arrow2_array: BooleanArray, py: Python) -> PyResult<PyObject> {
     let pyarrow_mod = py.import("pyarrow")?;
 
-    // TODO see how to get pointers from BooleanArray
-    // https://github.com/jhoekx/python-rust-arrow-interop-example/blob/master/src/lib.rs
-    let (array_ptr, schema_ptr) = arrow2_array.xxx();
+    let arrow2_field = Field::new("is_prime", DataType::Boolean, false);
+
+    let pyarrow_field = Box::new(ffi::export_field_to_c(&arrow2_field));
+    let pyarrow_array = Box::new(ffi::export_array_to_c(arrow2_array.boxed()));    
+    
+    let schema_ptr: *const ffi::ArrowSchema = &*pyarrow_field;    
+    let array_ptr: *const ffi::ArrowArray = &*pyarrow_array;
 
     let pyarrow_array = pyarrow_mod.getattr("Array")?
                                    .call_method1("_import_from_c",
@@ -96,11 +100,11 @@ pub fn is_prime_scalar(n: u64) -> bool {
 /// array of int64.
 #[pyfunction]
 fn is_prime(raw_pyarrow_array: &PyAny, py: Python) -> PyResult<PyObject> {
-    let bitmap = MutableBitmap::with_capacity(raw_pyarrow_array.len().unwrap());
+    let mut bitmap = MutableBitmap::with_capacity(raw_pyarrow_array.len().unwrap());
 
     for array_element in pyarrow_to_arrow2(raw_pyarrow_array).iter() {
-        if let Some(number) = array_element {
-            bitmap.push(is_prime_scalar(*number));
+        if let Some(&number) = array_element {
+            bitmap.push(is_prime_scalar(number));
         } else {
             bitmap.push(false);
         }
@@ -124,7 +128,7 @@ fn is_prime(raw_pyarrow_array: &PyAny, py: Python) -> PyResult<PyObject> {
 fn are_all_primes(raw_pyarrow_array: &PyAny) -> PyResult<bool> {
     for array_element in pyarrow_to_arrow2(&raw_pyarrow_array).iter() {
         if let Some(number) = array_element {
-            if is_prime_scalar(*number) { return Ok(false) }
+            if !is_prime_scalar(*number) { return Ok(false) }
         }
     }
     Ok(true)
@@ -132,7 +136,7 @@ fn are_all_primes(raw_pyarrow_array: &PyAny) -> PyResult<bool> {
 
 /// Python module that will be made available form Rust.
 #[pymodule]
-fn pandas_prime(_py: Python, m: &PyModule) -> PyResult<()> {
+fn arrow_prime(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(is_prime, m)?)?;
     m.add_function(wrap_pyfunction!(are_all_primes, m)?)?;
     Ok(())

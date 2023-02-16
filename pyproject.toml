@@ -1,0 +1,8 @@
+[project]
+name = "pandas_prime"
+version = "0.1.0"
+dependencies = ["pandas", "pyarrow"]
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools"]
